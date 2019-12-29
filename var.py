@@ -1,3 +1,4 @@
+
 from tiingo import TiingoClient
 import pandas as pd
 import datetime
@@ -6,26 +7,24 @@ import matplotlib.pyplot as plt
 import warnings
 import scipy
 import scipy.stats
-
+import matplotlib.pyplot as plt
 
 # Tiingo API is returning a warning due to an upcoming pandas update
 warnings.filterwarnings('ignore')
 # User Set Up
-# 填写持仓的股票，可以填写多只股票，持股数量请按顺序填写于Quantity后的list中，这里我们只需要计算仙鹤股份的VaR,故只填写603733和对应的300股即可
-data = {'Stocks': ['603733'], 'Quantity': [300]}
-# 需要回溯的历史数据的天数
-ScenariosNo = 500
-# 置信区间
-# Percentile = 99
-# 需要计算几天的VaR,这里我们只要配售了可转债即可卖出正股，填1即可
-VarDaysHorizon = 1
-# 需要显示更多提示信息填写1
-info = 0
+data = {'Stocks': ['600939'], 'Quantity': [600]}  # Define your holdings
+ScenariosNo = 500  # Define the number of scenarios you want to run
+# Percentile = 80  # Define your confidence interval
+VarDaysHorizon = 1  # Define your time period
+info = 0  # 1 if you want more info returned by the script
 # Create a DataFrame of holdings
 df = pd.DataFrame(data)
 # print('[INFO] Calculating the max amount of money the portfolio will lose within',
 #       VarDaysHorizon, 'days', Percentile, 'percent of the time.')
 today = datetime.date.today() - datetime.timedelta(days=1)
+low=111
+high=113
+fee=15
 
 
 def is_business_day(date):
@@ -52,11 +51,10 @@ def dateforNoOfScenarios(date):
 def SourceHistoricPrices():
     if info == 1:
         print('[INFO] Fetching stock prices for portfolio holdings')
-    # Set Up for Tiingo  tiingo是一个提供财经数据的网站，可以通过tiingo提供的api获取相应的股票收盘价数据
-    # 具体请访问 https://api.tiingo.com/
+    # Set Up for Tiingo
     config = {}
     config['session'] = True
-    config['api_key'] = '请在这里填写你自己的tiingo的api_key'
+    config['api_key'] = '填写你自己的 Tiingo api_key'
     client = TiingoClient(config)
     # Create a list of tickers for the API call
     Tickers = []
@@ -73,6 +71,7 @@ def SourceHistoricPrices():
     global HistData
     HistData = client.get_dataframe(
         Tickers, metric_name='close', startDate=dateforNoOfScenarios(today), endDate=today)
+    print(HistData)
     if info == 1:
         print('[INFO] Fetching stock prices completed.', len(HistData), 'days.')
     return(HistData)
@@ -91,7 +90,7 @@ def ValuePortfolio():
         i = i+1
 
 
-def Calculate(Percentile):
+def Calculate(Percentile,low,high,fee):
     if info == 1:
         print('[INFO] Calculating Daily % Changes')
     # calculating percentage change
@@ -115,30 +114,17 @@ def Calculate(Percentile):
     ES_Result = round(SortedHistData['DollarChange'].head(
         ValueLocForPercentile).mean(axis=0), 2) * np.sqrt(VarDaysHorizon)
     # print('The portfolios\'s Expected Shortfall is', ES_Result)
-    print('Confidence interval: %s%%\t VaR: %s \t Expected Shortfall: %s \t' % (Percentile, VaR_Result, ES_Result))
+    print('%s%%\t%s\t%s\t%s' % (Percentile,VaR_Result,(low-100)*10+VaR_Result-fee,(high-100)*10+VaR_Result-fee))
+
+def Output(low,high,fee):
+    cis = [5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,99]
+    print('置信区间\tVaR\t转债价格@%s\t转债价格@%s' % (low,high))
+    for ci in cis:
+        Calculate(ci,low,high,fee)
 
 SourceHistoricPrices()
 ValuePortfolio()
-Calculate(5)
-Calculate(10)
-Calculate(15)
-Calculate(20)
-Calculate(25)
-Calculate(30)
-Calculate(35)
-Calculate(40)
-Calculate(45)
-Calculate(50)
-Calculate(55)
-Calculate(60)
-Calculate(65)
-Calculate(70)
-Calculate(75)
-Calculate(80)
-Calculate(85)
-Calculate(90)
-Calculate(95)
-Calculate(99)
+Output(low,high,fee)
 
 
 
