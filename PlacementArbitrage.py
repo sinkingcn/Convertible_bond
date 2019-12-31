@@ -106,7 +106,7 @@ def adjBDate(dtstr, direction, interval=1, isForced=False):
     :param isForced: 是否强制调整 True:无论当前是否交易日都调整  False:当前不是交易日才调整
     :return:
     '''
-    holiday_dates = [pd.datetime(2019, 6, 7), pd.datetime(2019, 9, 13)]  # 节日
+    holiday_dates = [pd.datetime(2019, 4, 5), pd.datetime(2019, 6, 7), pd.datetime(2019, 9, 13)]  # 节日
     dt = date.today() if pd.isnull(dtstr) else datetime.strptime(str(dtstr), '%Y-%m-%d')
     flag = bool(len(pd.bdate_range(dt, dt, freq='C', holidays=holiday_dates)))
     if isForced:
@@ -152,18 +152,18 @@ def get_df_from_ts(symbol, start, end):
 
 def main():
     # pd.options.display.max_rows=999
-    # pd.options.display.max_columns=999
+    pd.options.display.max_columns=999
     # Tiingo
     config = {}
     config['session'] = True
-    config['api_key'] = "请填写自己的 Tiingo api_key"
+    config['api_key'] = ""  # 请填写你自己的Tiingo api_key
     global client
     client = TiingoClient(config)
     # Tushare
-    ts.set_token('请填写自己的 Tushare 的token')
+    ts.set_token('')  # 请填写你自己的Tushare token
     global pro
     pro = ts.pro_api()
-    # print(get_df_from_ts('603806.SH','20190913','20191118'))
+    # print(get_df_from_ts('601611.SH','20190116','20190408'))
     # return
 
     base_df = get_jsl_data('2019-06-30')
@@ -171,11 +171,17 @@ def main():
                             '可转换公司债券申请获中国证券监督管理委员会核准', '可转换公司债券获得中国证监会核准',
                             '可转换公司债券申请获得中国证券监督管理委员会核准', '可转换公司债券申请获得中国证监会核准',
                             '可转债申请获得中国证监会核准'],
-               'PlacingResult': ['可转换公司债券网上发行中签率及网下发行配售结果', '可转换公司债券网上中签率及优先配售结果']}
-    df_app = get_cninfo_announcement('sh', ';'.join(keyDict['Approval']), '2018-07-01')
-    df_app = df_app.loc[df_app.title.apply(lambda x:x.find('公开发行') >= 0)]
+               'PlacingResult': ['可转换公司债券网上发行中签率及网下发行配售结果', '可转换公司债券网上中签率及优先配售结果'],
+               'PreApproval': ['可转换公司债券申请获得中国证监会发审委审核通过', '可转换公司债券申请获得中国证监会发行审核委员会审核通过',
+                               '可转债申请获得中国证监会发行审核委员会审核通过', '可转换公司债券申请获中国证监会发行审核委员会审核通过',
+                               '可转债获得中国证监会发审会审核通过', '可转债获得中国证监会发审会审核通过',
+                               '可转换公司债券申请获得中国证券监督管理委员会发行审核委员会审核通过',
+                               '可转债申请获中国证券监督管理委员会发行审核委员会审核通过', '可转债方案获中国证监会审核通过',
+                               '可转换公司债券申请获中国证监会发行审核委员会审核批准']}
+    df_app = get_cninfo_announcement('sh', ';'.join(keyDict['PreApproval']), '2018-04-01')
+    # df_app = df_app.loc[df_app.title.apply(lambda x:x.find('公开发行') >= 0)]
     df_app.rename(columns={'time': 'approval_date'}, inplace=True)
-    df_result = get_cninfo_announcement('sh', ';'.join(keyDict['PlacingResult']),'2019-01-01')
+    df_result = get_cninfo_announcement('sh', ';'.join(keyDict['PlacingResult']), '2019-01-01')
     df_result.rename(columns={'time': 'apply_date'}, inplace=True)
     df = pd.merge(base_df, df_app, how='left', left_on='stock_cd', right_on='secCode')
     df = pd.merge(df, df_result, how='left', left_on='stock_cd', right_on='secCode')
@@ -191,28 +197,28 @@ def main():
     for index, row in df.iterrows():
         # temp = get_df_from_tiingo(row['stock_cd'],row['approval_date'],row['apply_date'])
         temp = get_df_from_ts(row['stock_cd']+'.SH', row['approval_date'].replace('-', ''), row['apply_date'].replace('-', ''))
-        buy.append(temp.at[row['approval_date'], 'close'])
+        buy.append(temp.at[row['approval_date'], 'close'][0])
         hp = max(temp.high)
         lp = min(temp.low)
         high.append(hp)
         high_dt.append(temp[temp.high == hp].index.tolist()[0])
         low.append(lp)
         low_dt.append(temp[temp.low == lp].index.tolist()[0])
-        sell.append(temp.at[row['apply_date'], 'open'])
-    df['buy_price'] = pd.Series(buy).fillna(0).astype(str).str.strip('[]').astype(float)
+        sell.append(temp.at[row['apply_date'], 'open'][0])
+    df['buy_price'] = pd.Series(buy).fillna(0).astype(float)
     df['cost'] = df['shares_to_buy']*df['buy_price']
     df['high_date'] = pd.Series(high_dt)
-    df['high_price'] = pd.Series(high).fillna(0).astype(str).str.strip('[]').astype(float)
+    df['high_price'] = pd.Series(high).fillna(0).astype(float)
     df['max_earning'] = (df['high_price']-df['buy_price'])*df['shares_to_buy']
     # df['max_return'] = round((df['high_price']/df['buy_price']-1),4)
     df['high_interval'] = pd.to_datetime(df['high_date'])-pd.to_datetime(df['approval_date'])
     df['low_date'] = pd.Series(low_dt)
-    df['low_price'] = pd.Series(low).fillna(0).astype(str).str.strip('[]').astype(float)
-    df['sell_price'] = pd.Series(sell).fillna(0).astype(str).str.strip('[]').astype(float)
+    df['low_price'] = pd.Series(low).fillna(0).astype(float)
+    df['sell_price'] = pd.Series(sell).fillna(0).astype(float)
     df['last_earning'] = (df['sell_price']-df['buy_price'])*df['shares_to_buy']
     # df['last_return'] = round((df['sell_price']/df['buy_price']-1),4)
     df['last_interval'] = pd.to_datetime(df['apply_date'])-pd.to_datetime(df['approval_date'])
-    df.to_excel('D:/cbarb.xlsx')
+    df.to_excel('D:/cbpre.xlsx')
 
 
 if __name__ == '__main__':
